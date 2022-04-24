@@ -1,0 +1,78 @@
+﻿@page "/fetchdata"
+@using Microsoft.AspNetCore.SignalR.Client
+@using SignalRStockQuote.Shared
+@using SignalRStockQuote.Client.Components
+@inject HttpClient Http
+@inject NavigationManager navigationManager
+@implements IDisposable
+
+<h1>Stockquotes</h1>
+
+@if (quotes == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th style="text-align:right;">Price</th>
+                <th style="text-align:center;">Change</th>
+                <th style="text-align:right;">Volume</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach(var q in quotes)
+            {
+                <StockQuoteDisplay Quote = "q"></StockQuoteDisplay>
+            }
+        </tbody>
+    </table>
+}
+
+<div class="content px-4" style="background-color:gainsboro;">
+    Info=@infotext
+</div>
+
+@code {
+    private List<StockQuote> quotes = new();
+    private HubConnection HubConn;
+    private string infotext;
+
+    protected override async Task OnInitializedAsync()
+    {
+        this.HubConn = new HubConnectionBuilder()
+        .WithUrl(navigationManager.ToAbsoluteUri("/hubs/quotes"))
+        .Build();
+
+        this.HubConn.On<string>("QuoteHubMessages", (msg) =>
+        {
+            this.infotext = $"{msg}";
+            StateHasChanged();
+        });
+
+        this.HubConn.On<StockQuote>("SendQuoteInfo", (quote) =>
+        {
+            int i = quotes.FindIndex(q => q.Symbol == quote.Symbol);
+            if(i < 0)
+            {
+                this.quotes.Add(quote);
+                StateHasChanged();
+            }
+            else
+            {
+                this.quotes[i].UpdateQuoteData(quote);
+                //StateHasChanged(); //no need to refresh the entire page => low performance
+            }
+        });
+
+        await this.HubConn.StartAsync();
+    }
+
+    public void Dispose()
+    {
+        this.HubConn?.StopAsync();
+    }
+}
